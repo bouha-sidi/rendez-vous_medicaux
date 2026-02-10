@@ -1,4 +1,8 @@
+// lib/pages/register_page.dart
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../services/api.dart';
 import '../widgets/wave_header.dart';
 import '../widgets/app_text_field.dart';
 import '../widgets/app_buttons.dart';
@@ -15,21 +19,22 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   UserRole role = UserRole.patient;
 
-  // Champs communs
   final nameCtrl = TextEditingController();
   final emailCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
 
-  // Champs médecin
   final specialtyCtrl = TextEditingController();
   final clinicAddressCtrl = TextEditingController();
   final priceCtrl = TextEditingController();
 
-  // Password
   final passCtrl = TextEditingController();
   final pass2Ctrl = TextEditingController();
+
   bool hide1 = true;
   bool hide2 = true;
+  bool loading = false;
+
+  XFile? doctorPhoto;
 
   @override
   void dispose() {
@@ -44,60 +49,108 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
-  void _submit() {
-    // ✅ validation simple
+  Future<void> pickDoctorPhoto() async {
+    final picker = ImagePicker();
+    final img = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    if (img != null) {
+      setState(() => doctorPhoto = img);
+    }
+  }
+
+  Future<void> _submit() async {
+    // ✅ validation
     if (nameCtrl.text.trim().isEmpty ||
         emailCtrl.text.trim().isEmpty ||
         phoneCtrl.text.trim().isEmpty ||
         passCtrl.text.isEmpty ||
         pass2Ctrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Remplis tous les champs obligatoires.")),
-      );
+      _toast("Remplis tous les champs obligatoires.");
       return;
     }
 
     if (passCtrl.text != pass2Ctrl.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Les mots de passe ne correspondent pas."),
-        ),
-      );
+      _toast("Les mots de passe ne correspondent pas.");
       return;
     }
 
-    // Champs médecin obligatoires
     if (role == UserRole.doctor) {
       if (specialtyCtrl.text.trim().isEmpty ||
           clinicAddressCtrl.text.trim().isEmpty ||
           priceCtrl.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "Pour Médecin, spécialité/adresse/prix sont obligatoires.",
-            ),
-          ),
-        );
+        _toast("Pour Médecin, spécialité/adresse/prix sont obligatoires.");
         return;
       }
+      final price = int.tryParse(priceCtrl.text.trim());
+      if (price == null) {
+        _toast("Consultation price doit être un nombre.");
+        return;
+      }
+      if (doctorPhoto == null) {
+        _toast("Choisis une photo du médecin.");
+        return;
+      }
+
+      setState(() => loading = true);
+      try {
+        await Api.registerDoctor(
+          fullName: nameCtrl.text.trim(),
+          email: emailCtrl.text.trim(),
+          phone: phoneCtrl.text.trim(),
+          password: passCtrl.text,
+          specialty: specialtyCtrl.text.trim(),
+          clinicAddress: clinicAddressCtrl.text.trim(),
+          consultationPrice: price,
+          doctorPhoto: doctorPhoto!,
+        );
+
+        if (!mounted) return;
+        _toast("Compte Médecin créé ✅");
+        Navigator.pop(context);
+      } catch (e) {
+        _toast(e.toString().replaceAll("Exception:", "").trim());
+      } finally {
+        if (mounted) setState(() => loading = false);
+      }
+      return;
     }
 
-    // ✅ pour l’instant on affiche juste les infos (plus tard Firebase/API)
-    final who = role == UserRole.patient ? "Patient" : "Médecin";
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Compte $who créé ✅ (UI seulement)")),
-    );
+    // PATIENT
+    setState(() => loading = true);
+    try {
+      await Api.registerPatient(
+        fullName: nameCtrl.text.trim(),
+        email: emailCtrl.text.trim(),
+        phone: phoneCtrl.text.trim(),
+        password: passCtrl.text,
+      );
+
+      if (!mounted) return;
+      _toast("Compte Patient créé ✅");
+      Navigator.pop(context);
+    } catch (e) {
+      _toast(e.toString().replaceAll("Exception:", "").trim());
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  void _toast(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDoctor = role == UserRole.doctor;
+
     return Scaffold(
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
           WaveHeader(
             height: 280,
-            // si tu as déjà le WaveHeader corrigé mobile: c’est bon
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: const [
@@ -115,7 +168,6 @@ class _RegisterPageState extends State<RegisterPage> {
               ],
             ),
           ),
-
           const SizedBox(height: 16),
           const Center(
             child: Text(
@@ -125,7 +177,6 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
           const SizedBox(height: 14),
 
-          // ✅ Choix Patient / Médecin
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 26),
             child: _RoleSwitcher(
@@ -147,8 +198,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 AppTextField(controller: phoneCtrl, hint: "Phone"),
                 const SizedBox(height: 12),
 
-                // ✅ Champs supplémentaires si Médecin
-                if (role == UserRole.doctor) ...[
+                if (isDoctor) ...[
                   AppTextField(
                     controller: specialtyCtrl,
                     hint: "Specialty (ex: Cardiologue)",
@@ -162,6 +212,21 @@ class _RegisterPageState extends State<RegisterPage> {
                   AppTextField(
                     controller: priceCtrl,
                     hint: "Consultation price (ex: 500)",
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ✅ Photo picker
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: loading ? null : pickDoctorPhoto,
+                      icon: const Icon(Icons.photo),
+                      label: Text(
+                        doctorPhoto == null
+                            ? "Choisir photo médecin"
+                            : "Photo: ${doctorPhoto!.name}",
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -190,10 +255,12 @@ class _RegisterPageState extends State<RegisterPage> {
                 const SizedBox(height: 18),
 
                 GradientButton(
-                  text: role == UserRole.patient
-                      ? "Create Patient Account"
-                      : "Create Doctor Account",
-                  onTap: _submit,
+                  text: loading
+                      ? "Création..."
+                      : (isDoctor
+                            ? "Create Doctor Account"
+                            : "Create Patient Account"),
+                  onTap: loading ? null : _submit,
                 ),
 
                 const SizedBox(height: 12),

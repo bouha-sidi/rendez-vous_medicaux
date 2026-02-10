@@ -1,11 +1,12 @@
+// backend/src/server.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import path from "path";
+
 import User from "./models/User.js";
-import authRoutes from "./routes/auth.routes.js";
 import { uploadDoctorPhoto } from "./middleware/uploadDoctorPhoto.js";
 import { initializeDatabase } from "./config/db.js";
 
@@ -13,30 +14,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use("/api/auth", authRoutes);
-
 // ✅ servir les images
 app.use("/uploads", express.static(path.resolve("uploads")));
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME";
-const DB_HOST = process.env.DB_HOST || "localhost";
-const DB_PORT = process.env.DB_PORT || 3306;
-const DB_USER = process.env.DB_USER || "ghoutoub";
-const DB_PASSWORD = process.env.DB_PASSWORD || "mic19048";
-const DB_NAME = process.env.DB_NAME || "med_rdv";
 
 app.get("/", (req, res) => res.json({ ok: true, msg: "API MED-RDV running" }));
 
-// ✅ REGISTER (patient JSON / doctor multipart + photo obligatoire)
+// ✅ REGISTER (patient JSON / doctor multipart + photo)
 app.post(
-  "/auth/register",
+  "/api/auth/register",
   (req, res, next) => {
-    // Si c'est doctor => multipart (photo)
-    // Si patient => JSON normal
-    const role = req.headers["x-role"]; // optionnel
-    // On essaie de lire role via body si json, sinon via fields multipart
-    // On ne sait pas à l'avance => on applique multer quand même, il accepte sans fichier.
     uploadDoctorPhoto.single("doctorPhoto")(req, res, (err) => {
       if (err) return res.status(400).json({ message: err.message });
       next();
@@ -45,8 +34,8 @@ app.post(
   async (req, res) => {
     try {
       const {
-        role, // "patient" | "doctor"
-        name, // ou "fullName"
+        role,
+        name,
         fullName,
         email,
         phone,
@@ -56,8 +45,7 @@ app.post(
         consultationPrice,
       } = req.body;
 
-      // Supporter "name" et "fullName"
-      const userFullName = fullName || name;
+      const userFullName = (fullName || name || "").trim();
 
       if (!role || !userFullName || !email || !phone || !password) {
         return res.status(400).json({ message: "Missing required fields" });
@@ -66,7 +54,6 @@ app.post(
         return res.status(400).json({ message: "Invalid role" });
       }
 
-      // ✅ doctor rules
       if (role === "doctor") {
         if (!req.file) {
           return res.status(400).json({ message: "Doctor photo is required" });
@@ -82,22 +69,22 @@ app.post(
 
       const passwordHash = await bcrypt.hash(password, 10);
 
-      const user = await User.create({
+      const created = await User.create({
         role,
         fullName: userFullName,
         email,
         phone,
         passwordHash,
-
         specialty: role === "doctor" ? specialty : null,
         clinicAddress: role === "doctor" ? clinicAddress : null,
-        consultationPrice:
-          role === "doctor" ? Number(consultationPrice) : null,
+        consultationPrice: role === "doctor" ? Number(consultationPrice) : null,
         doctorPhoto: role === "doctor" ? req.file.filename : null,
-        isVerifiedDoctor: role === "doctor" ? false : null,
+        isVerifiedDoctor: role === "doctor" ? false : false,
       });
 
-      return res.status(201).json({ message: "Registered", userId: user._id });
+      return res
+        .status(201)
+        .json({ message: "Registered", userId: created._id });
     } catch (e) {
       console.error(e);
       return res.status(500).json({ message: "Server error" });
@@ -106,7 +93,7 @@ app.post(
 );
 
 // ✅ LOGIN
-app.post("/auth/login", async (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password)
@@ -118,13 +105,13 @@ app.post("/auth/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-    // (option) bloquer doctor non vérifié
-    if (user.role === "doctor" && user.isVerifiedDoctor === false) {
+    // (optionnel) bloquer doctor non vérifié
+    if (user.role === "doctor" && user.isVerifiedDoctor === 0) {
       return res.status(403).json({ message: "Doctor not verified yet" });
     }
 
     const token = jwt.sign(
-      { id: user._id.toString(), role: user.role, email: user.email },
+      { id: String(user.id), role: user.role, email: user.email },
       JWT_SECRET,
       { expiresIn: "7d" },
     );
@@ -132,7 +119,7 @@ app.post("/auth/login", async (req, res) => {
     return res.json({
       token,
       user: {
-        id: user._id,
+        id: user.id,
         role: user.role,
         fullName: user.fullName,
         email: user.email,

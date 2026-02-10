@@ -28,7 +28,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> handleLogin() async {
-    if (emailCtrl.text.isEmpty || passCtrl.text.isEmpty) {
+    final email = emailCtrl.text.trim();
+    final pass = passCtrl.text;
+
+    if (email.isEmpty || pass.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Veuillez remplir tous les champs")),
       );
@@ -38,30 +41,37 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => loading = true);
 
     try {
-      final data = await Api.login(
-        email: emailCtrl.text.trim(),
-        password: passCtrl.text,
-      );
+      final data = await Api.login(email: email, password: pass);
 
-      final role = data["user"]["role"].toString().toUpperCase();
+      // backend renvoie: user.role = "patient" | "doctor" | "admin"
+      final role = (data["user"]["role"] ?? "").toString().toLowerCase();
 
       if (!mounted) return;
 
-      if (role == "PATIENT") {
+      if (role == "patient") {
         Navigator.pushReplacementNamed(context, "/patient");
-      } else if (role == "DOCTOR") {
+      } else if (role == "doctor") {
         Navigator.pushReplacementNamed(context, "/doctor");
-      } else if (role == "ADMIN") {
+      } else if (role == "admin") {
         Navigator.pushReplacementNamed(context, "/admin");
       } else {
-        throw Exception("Rôle inconnu: $role");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Rôle inconnu: $role")),
+        );
       }
     } catch (e) {
+      final msg = e
+          .toString()
+          .replaceAll("Exception:", "")
+          .replaceAll("Exception", "")
+          .trim();
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceAll("Exception:", ""))),
+        SnackBar(content: Text(msg.isEmpty ? "Erreur login" : msg)),
       );
     } finally {
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
     }
   }
 
@@ -90,7 +100,6 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
           ),
-
           const SizedBox(height: 18),
           const Center(
             child: Text(
@@ -99,14 +108,12 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
           const SizedBox(height: 18),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 26),
             child: Column(
               children: [
                 AppTextField(controller: emailCtrl, hint: "Email"),
                 const SizedBox(height: 12),
-
                 AppTextField(
                   controller: passCtrl,
                   hint: "Password",
@@ -116,9 +123,7 @@ class _LoginPageState extends State<LoginPage> {
                     icon: Icon(hide ? Icons.visibility_off : Icons.visibility),
                   ),
                 ),
-
                 const SizedBox(height: 12),
-
                 Row(
                   children: [
                     Checkbox(
@@ -128,25 +133,19 @@ class _LoginPageState extends State<LoginPage> {
                     const Text("Remember me"),
                     const Spacer(),
                     TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        // plus tard: page reset password
+                      },
                       child: const Text("Forget password?"),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 6),
-
                 OutlinePurpleButton(
                   text: loading ? "Connexion..." : "Login",
-                  onTap: loading
-                      ? null
-                      : () {
-                          handleLogin();
-                        },
+                  onTap: loading ? null : handleLogin,
                 ),
-
                 const SizedBox(height: 16),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -166,7 +165,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 30),
               ],
             ),
