@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api.dart';
 import '../widgets/wave_header.dart';
 import '../widgets/app_text_field.dart';
 import '../widgets/app_buttons.dart';
@@ -12,17 +13,56 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final userCtrl = TextEditingController();
+  final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
 
   bool remember = false;
   bool hide = true;
+  bool loading = false;
 
   @override
   void dispose() {
-    userCtrl.dispose();
+    emailCtrl.dispose();
     passCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> handleLogin() async {
+    if (emailCtrl.text.isEmpty || passCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Veuillez remplir tous les champs")),
+      );
+      return;
+    }
+
+    setState(() => loading = true);
+
+    try {
+      final data = await Api.login(
+        email: emailCtrl.text.trim(),
+        password: passCtrl.text,
+      );
+
+      final role = data["user"]["role"].toString().toUpperCase();
+
+      if (!mounted) return;
+
+      if (role == "PATIENT") {
+        Navigator.pushReplacementNamed(context, "/patient");
+      } else if (role == "DOCTOR") {
+        Navigator.pushReplacementNamed(context, "/doctor");
+      } else if (role == "ADMIN") {
+        Navigator.pushReplacementNamed(context, "/admin");
+      } else {
+        throw Exception("Rôle inconnu: $role");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceAll("Exception:", ""))),
+      );
+    } finally {
+      setState(() => loading = false);
+    }
   }
 
   @override
@@ -64,8 +104,9 @@ class _LoginPageState extends State<LoginPage> {
             padding: const EdgeInsets.symmetric(horizontal: 26),
             child: Column(
               children: [
-                AppTextField(controller: userCtrl, hint: "Username"),
+                AppTextField(controller: emailCtrl, hint: "Email"),
                 const SizedBox(height: 12),
+
                 AppTextField(
                   controller: passCtrl,
                   hint: "Password",
@@ -96,12 +137,12 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 6),
 
                 OutlinePurpleButton(
-                  text: "Login",
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Login ✅ (UI only)")),
-                    );
-                  },
+                  text: loading ? "Connexion..." : "Login",
+                  onTap: loading
+                      ? null
+                      : () {
+                          handleLogin();
+                        },
                 ),
 
                 const SizedBox(height: 16),
@@ -126,61 +167,12 @@ class _LoginPageState extends State<LoginPage> {
                   ],
                 ),
 
-                const SizedBox(height: 16),
-                const Row(
-                  children: [
-                    Expanded(child: Divider()),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Text("OR", style: TextStyle(color: Colors.grey)),
-                    ),
-                    Expanded(child: Divider()),
-                  ],
-                ),
-
-                const SizedBox(height: 14),
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _SocialCircle(Icons.alternate_email),
-                    SizedBox(width: 12),
-                    _SocialCircle(Icons.work),
-                    SizedBox(width: 12),
-                    _SocialCircle(Icons.facebook),
-                    SizedBox(width: 12),
-                    _SocialCircle(Icons.g_mobiledata),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  "Sign in with another account",
-                  style: TextStyle(color: Colors.grey),
-                ),
                 const SizedBox(height: 30),
               ],
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SocialCircle extends StatelessWidget {
-  final IconData icon;
-  const _SocialCircle(this.icon);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF6A35FF), width: 1.2),
-        color: Colors.white,
-      ),
-      child: Icon(icon, color: const Color(0xFF6A35FF)),
     );
   }
 }
