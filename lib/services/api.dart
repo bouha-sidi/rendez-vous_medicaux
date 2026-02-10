@@ -7,17 +7,16 @@ import 'package:mime/mime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Api {
-  /// ⚠️ IMPORTANT
-  /// Remplace par l’IP de ton PC si tu es sur téléphone
-  /// ex: http://192.168.1.20:3000
-  static const String baseUrl = "http://10.0.2.2:3000"; // émulateur
-  // static const String baseUrl = "http://192.168.1.20:3000"; // téléphone réel
+  /// ⚠️ émulateur Android
+  static const String baseUrl = "http://127.0.0.1:3000/api";
+  // téléphone réel : http://192.168.x.x:5000/api
 
-  // ---------------- TOKEN ----------------
+  // ================= TOKEN =================
 
-  static Future<void> saveToken(String token) async {
+  static Future<void> saveSession(String token, String role) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString("token", token);
+    await prefs.setString("role", role);
   }
 
   static Future<String?> getToken() async {
@@ -25,86 +24,42 @@ class Api {
     return prefs.getString("token");
   }
 
-  static Future<void> logout() async {
+  static Future<String?> getRole() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove("token");
+    return prefs.getString("role");
   }
 
-  // ---------------- REGISTER PATIENT ----------------
+  static Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+  }
 
-  static Future<void> registerPatient({
-    required String fullName,
+  // ================= REGISTER =================
+
+  static Future<void> register({
+    required String name,
     required String email,
-    required String phone,
     required String password,
+    String role = "patient",
   }) async {
     final res = await http.post(
       Uri.parse("$baseUrl/auth/register"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "role": "patient",
-        "fullName": fullName,
+        "name": name,
         "email": email,
-        "phone": phone,
         "password": password,
+        "role": role,
       }),
     );
 
     final data = jsonDecode(res.body);
     if (res.statusCode >= 400) {
-      throw Exception(data["message"] ?? "Register patient failed");
+      throw Exception(data["message"] ?? "Register failed");
     }
   }
 
-  // ---------------- REGISTER DOCTOR (PHOTO OBLIGATOIRE) ----------------
-
-  static Future<void> registerDoctor({
-    required String fullName,
-    required String email,
-    required String phone,
-    required String password,
-    required String specialty,
-    required String clinicAddress,
-    required double consultationPrice,
-    required File doctorPhoto,
-  }) async {
-    final request = http.MultipartRequest(
-      "POST",
-      Uri.parse("$baseUrl/auth/register"),
-    );
-
-    request.fields.addAll({
-      "role": "doctor",
-      "fullName": fullName,
-      "email": email,
-      "phone": phone,
-      "password": password,
-      "specialty": specialty,
-      "clinicAddress": clinicAddress,
-      "consultationPrice": consultationPrice.toString(),
-    });
-
-    final mimeType = lookupMimeType(doctorPhoto.path) ?? "image/jpeg";
-    final parts = mimeType.split("/");
-
-    request.files.add(
-      await http.MultipartFile.fromPath(
-        "doctorPhoto", // ⚠️ même nom que backend
-        doctorPhoto.path,
-        contentType: MediaType(parts[0], parts[1]),
-      ),
-    );
-
-    final streamed = await request.send();
-    final body = await streamed.stream.bytesToString();
-    final data = jsonDecode(body);
-
-    if (streamed.statusCode >= 400) {
-      throw Exception(data["message"] ?? "Register doctor failed");
-    }
-  }
-
-  // ---------------- LOGIN ----------------
+  // ================= LOGIN =================
 
   static Future<Map<String, dynamic>> login({
     required String email,
@@ -117,11 +72,12 @@ class Api {
     );
 
     final data = jsonDecode(res.body);
+
     if (res.statusCode >= 400) {
       throw Exception(data["message"] ?? "Login failed");
     }
 
-    await saveToken(data["token"]);
+    await saveSession(data["token"], data["user"]["role"]);
     return data;
   }
 }

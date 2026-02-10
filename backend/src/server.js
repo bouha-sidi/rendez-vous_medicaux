@@ -3,22 +3,28 @@ import express from "express";
 import cors from "cors";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
 import path from "path";
-
 import User from "./models/User.js";
+import authRoutes from "./routes/auth.routes.js";
 import { uploadDoctorPhoto } from "./middleware/uploadDoctorPhoto.js";
+import { initializeDatabase } from "./config/db.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+app.use("/api/auth", authRoutes);
 
 // ✅ servir les images
 app.use("/uploads", express.static(path.resolve("uploads")));
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME";
-const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/med_rdv";
+const DB_HOST = process.env.DB_HOST || "localhost";
+const DB_PORT = process.env.DB_PORT || 3306;
+const DB_USER = process.env.DB_USER || "ghoutoub";
+const DB_PASSWORD = process.env.DB_PASSWORD || "mic19048";
+const DB_NAME = process.env.DB_NAME || "med_rdv";
 
 app.get("/", (req, res) => res.json({ ok: true, msg: "API MED-RDV running" }));
 
@@ -40,6 +46,7 @@ app.post(
     try {
       const {
         role, // "patient" | "doctor"
+        name, // ou "fullName"
         fullName,
         email,
         phone,
@@ -49,7 +56,10 @@ app.post(
         consultationPrice,
       } = req.body;
 
-      if (!role || !fullName || !email || !phone || !password) {
+      // Supporter "name" et "fullName"
+      const userFullName = fullName || name;
+
+      if (!role || !userFullName || !email || !phone || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
       if (!["patient", "doctor"].includes(role)) {
@@ -74,17 +84,17 @@ app.post(
 
       const user = await User.create({
         role,
-        fullName,
+        fullName: userFullName,
         email,
         phone,
         passwordHash,
 
-        specialty: role === "doctor" ? specialty : undefined,
-        clinicAddress: role === "doctor" ? clinicAddress : undefined,
+        specialty: role === "doctor" ? specialty : null,
+        clinicAddress: role === "doctor" ? clinicAddress : null,
         consultationPrice:
-          role === "doctor" ? Number(consultationPrice) : undefined,
-        doctorPhoto: role === "doctor" ? req.file.filename : undefined,
-        isVerifiedDoctor: role === "doctor" ? false : undefined,
+          role === "doctor" ? Number(consultationPrice) : null,
+        doctorPhoto: role === "doctor" ? req.file.filename : null,
+        isVerifiedDoctor: role === "doctor" ? false : null,
       });
 
       return res.status(201).json({ message: "Registered", userId: user._id });
@@ -142,12 +152,11 @@ app.post("/auth/login", async (req, res) => {
 });
 
 // ✅ Start
-mongoose
-  .connect(MONGO_URI)
+initializeDatabase()
   .then(() => {
-    console.log("✅ MongoDB connected");
+    console.log("✅ MySQL connected");
     app.listen(PORT, () =>
       console.log(`✅ Server running on http://localhost:${PORT}`),
     );
   })
-  .catch((err) => console.error("❌ MongoDB error:", err.message));
+  .catch((err) => console.error("❌ MySQL error:", err.message));

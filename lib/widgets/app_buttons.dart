@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 class GradientButton extends StatelessWidget {
   final String text;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
-  const GradientButton({super.key, required this.text, required this.onTap});
+  const GradientButton({super.key, required this.text, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -41,13 +41,9 @@ class GradientButton extends StatelessWidget {
 
 class OutlinePurpleButton extends StatelessWidget {
   final String text;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
-  const OutlinePurpleButton({
-    super.key,
-    required this.text,
-    required this.onTap,
-  });
+  const OutlinePurpleButton({super.key, required this.text, this.onTap});
 
   @override
   Widget build(BuildContext context) {
