@@ -5,7 +5,20 @@ import jwt from "jsonwebtoken";
 // REGISTER
 export const register = async (req, res) => {
   try {
-    const { name, fullName, email, password, phone, role } = req.body;
+    let {
+      name,
+      fullName,
+      email,
+      password,
+      phone,
+      role,
+      specialty,
+      clinicAddress,
+      consultationPrice,
+      date_of_birth,
+      address,
+      gender
+    } = req.body;
 
     // Supporter les deux formats
     const userFullName = fullName || name;
@@ -21,26 +34,33 @@ export const register = async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const user = await User.create({
+    // Construction de l'objet utilisateur
+    const userData = {
       role: role || "patient",
       fullName: userFullName,
       email,
       phone: phone || "",
       passwordHash,
-      specialty: null,
-      clinicAddress: null,
-      consultationPrice: null,
+      specialty: role === "doctor" ? specialty : null,
+      clinicAddress: role === "doctor" ? clinicAddress : null,
+      consultationPrice: role === "doctor" ? consultationPrice : null,
       doctorPhoto: null,
       isVerifiedDoctor: false,
-    });
+      date_of_birth: role === "patient" ? date_of_birth : null,
+      address: role === "patient" ? address : null,
+      gender: role === "patient" ? gender : null,
+      profilePhoto: null
+    };
+
+    const user = await User.create(userData);
 
     res.status(201).json({
       message: "Utilisateur créé avec succès",
       user: {
         id: user.id,
         email: user.email,
-        role: user.role,
-      },
+        role: user.role
+      }
     });
   } catch (error) {
     console.error(error);
@@ -48,11 +68,10 @@ export const register = async (req, res) => {
   }
 };
 
-// LOGIN
+// LOGIN (inchangé)
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
       return res.status(400).json({ message: "Email et password requis" });
     }
@@ -79,8 +98,8 @@ export const login = async (req, res) => {
         id: user.id,
         email: user.email,
         role: user.role,
-        fullName: user.fullName,
-      },
+        fullName: user.fullName
+      }
     });
   } catch (error) {
     console.error(error);

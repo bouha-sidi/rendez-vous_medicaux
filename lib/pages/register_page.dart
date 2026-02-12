@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../services/api.dart';
 import '../widgets/wave_header.dart';
 import '../widgets/app_text_field.dart';
 import '../widgets/app_buttons.dart';
+import 'login_page.dart';
 
 enum UserRole { patient, doctor }
 
@@ -25,11 +27,18 @@ class _RegisterPageState extends State<RegisterPage> {
   final clinicAddressCtrl = TextEditingController();
   final priceCtrl = TextEditingController();
 
+  // Champs patient (profil détaillé)
+  final dateCtrl = TextEditingController();
+  final addressCtrl = TextEditingController();
+  String selectedGender = 'male';
+
   // Password
   final passCtrl = TextEditingController();
   final pass2Ctrl = TextEditingController();
   bool hide1 = true;
   bool hide2 = true;
+
+  bool loading = false;
 
   @override
   void dispose() {
@@ -39,53 +48,95 @@ class _RegisterPageState extends State<RegisterPage> {
     specialtyCtrl.dispose();
     clinicAddressCtrl.dispose();
     priceCtrl.dispose();
+    dateCtrl.dispose();
+    addressCtrl.dispose();
     passCtrl.dispose();
     pass2Ctrl.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    // ✅ validation simple
+  Future<void> _submit() async {
+    // Validation
     if (nameCtrl.text.trim().isEmpty ||
         emailCtrl.text.trim().isEmpty ||
         phoneCtrl.text.trim().isEmpty ||
         passCtrl.text.isEmpty ||
         pass2Ctrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Remplis tous les champs obligatoires.")),
-      );
+      _showSnackBar("Remplis tous les champs obligatoires.");
       return;
     }
 
     if (passCtrl.text != pass2Ctrl.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Les mots de passe ne correspondent pas."),
-        ),
-      );
+      _showSnackBar("Les mots de passe ne correspondent pas.");
       return;
     }
 
-    // Champs médecin obligatoires
+    if (passCtrl.text.length < 6) {
+      _showSnackBar("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegex.hasMatch(emailCtrl.text.trim())) {
+      _showSnackBar("Adresse email invalide.");
+      return;
+    }
+
     if (role == UserRole.doctor) {
       if (specialtyCtrl.text.trim().isEmpty ||
           clinicAddressCtrl.text.trim().isEmpty ||
           priceCtrl.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "Pour Médecin, spécialité/adresse/prix sont obligatoires.",
-            ),
-          ),
+        _showSnackBar(
+          "Pour Médecin, spécialité/adresse/prix sont obligatoires.",
         );
         return;
       }
     }
 
-    // ✅ pour l’instant on affiche juste les infos (plus tard Firebase/API)
-    final who = role == UserRole.patient ? "Patient" : "Médecin";
+    setState(() => loading = true);
+
+    try {
+      await Api.register(
+        name: nameCtrl.text.trim(),
+        email: emailCtrl.text.trim(),
+        password: passCtrl.text,
+        role: role == UserRole.patient ? 'patient' : 'doctor',
+        phone: phoneCtrl.text.trim(),
+        specialty: role == UserRole.doctor ? specialtyCtrl.text.trim() : null,
+        clinicAddress: role == UserRole.doctor
+            ? clinicAddressCtrl.text.trim()
+            : null,
+        consultationPrice: role == UserRole.doctor
+            ? int.tryParse(priceCtrl.text.trim())
+            : null,
+        dateOfBirth: role == UserRole.patient ? dateCtrl.text.trim() : null,
+        address: role == UserRole.patient ? addressCtrl.text.trim() : null,
+        gender: role == UserRole.patient ? selectedGender : null,
+      );
+
+      if (!mounted) return;
+      _showSnackBar(
+        "Compte créé avec succès ! Connectez-vous.",
+        isError: false,
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+    } catch (e) {
+      _showSnackBar(e.toString().replaceAll("Exception:", ""));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  void _showSnackBar(String msg, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Compte $who créé ✅ (UI seulement)")),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -97,7 +148,6 @@ class _RegisterPageState extends State<RegisterPage> {
         children: [
           WaveHeader(
             height: 280,
-            // si tu as déjà le WaveHeader corrigé mobile: c’est bon
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: const [
@@ -115,7 +165,6 @@ class _RegisterPageState extends State<RegisterPage> {
               ],
             ),
           ),
-
           const SizedBox(height: 16),
           const Center(
             child: Text(
@@ -125,7 +174,7 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
           const SizedBox(height: 14),
 
-          // ✅ Choix Patient / Médecin
+          // Sélecteur de rôle
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 26),
             child: _RoleSwitcher(
@@ -133,42 +182,102 @@ class _RegisterPageState extends State<RegisterPage> {
               onChanged: (r) => setState(() => role = r),
             ),
           ),
-
           const SizedBox(height: 14),
 
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 26),
             child: Column(
               children: [
-                AppTextField(controller: nameCtrl, hint: "Full name"),
+                AppTextField(controller: nameCtrl, hint: "Nom complet"),
                 const SizedBox(height: 12),
-                AppTextField(controller: emailCtrl, hint: "Email"),
+                AppTextField(
+                  controller: emailCtrl,
+                  hint: "Email",
+                  keyboardType: TextInputType.emailAddress,
+                ),
                 const SizedBox(height: 12),
-                AppTextField(controller: phoneCtrl, hint: "Phone"),
+                AppTextField(
+                  controller: phoneCtrl,
+                  hint: "Téléphone",
+                  keyboardType: TextInputType.phone,
+                ),
                 const SizedBox(height: 12),
 
-                // ✅ Champs supplémentaires si Médecin
+                // Champs patient
+                if (role == UserRole.patient) ...[
+                  AppTextField(
+                    controller: dateCtrl,
+                    hint: "Date de naissance",
+                    readOnly: true,
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now().subtract(
+                          const Duration(days: 365 * 18),
+                        ),
+                        firstDate: DateTime(1900),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          dateCtrl.text =
+                              "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                        });
+                      }
+                    },
+                    suffix: const Icon(Icons.calendar_today, size: 20),
+                  ),
+                  const SizedBox(height: 12),
+                  AppTextField(controller: addressCtrl, hint: "Adresse"),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text("Homme"),
+                          value: "male",
+                          groupValue: selectedGender,
+                          onChanged: (v) => setState(() => selectedGender = v!),
+                          dense: true,
+                        ),
+                      ),
+                      Expanded(
+                        child: RadioListTile<String>(
+                          title: const Text("Femme"),
+                          value: "female",
+                          groupValue: selectedGender,
+                          onChanged: (v) => setState(() => selectedGender = v!),
+                          dense: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // Champs médecin
                 if (role == UserRole.doctor) ...[
                   AppTextField(
                     controller: specialtyCtrl,
-                    hint: "Specialty (ex: Cardiologue)",
+                    hint: "Spécialité (ex: Cardiologue)",
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
                     controller: clinicAddressCtrl,
-                    hint: "Clinic address",
+                    hint: "Adresse du cabinet",
                   ),
                   const SizedBox(height: 12),
                   AppTextField(
                     controller: priceCtrl,
-                    hint: "Consultation price (ex: 500)",
+                    hint: "Prix consultation (ex: 500)",
+                    keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
                 ],
 
                 AppTextField(
                   controller: passCtrl,
-                  hint: "Password",
+                  hint: "Mot de passe",
                   obscure: hide1,
                   suffix: IconButton(
                     onPressed: () => setState(() => hide1 = !hide1),
@@ -176,32 +285,30 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-
                 AppTextField(
                   controller: pass2Ctrl,
-                  hint: "Confirm password",
+                  hint: "Confirmer mot de passe",
                   obscure: hide2,
                   suffix: IconButton(
                     onPressed: () => setState(() => hide2 = !hide2),
                     icon: Icon(hide2 ? Icons.visibility_off : Icons.visibility),
                   ),
                 ),
-
                 const SizedBox(height: 18),
 
-                GradientButton(
-                  text: role == UserRole.patient
-                      ? "Create Patient Account"
-                      : "Create Doctor Account",
-                  onTap: _submit,
-                ),
-
+                loading
+                    ? const CircularProgressIndicator()
+                    : GradientButton(
+                        text: role == UserRole.patient
+                            ? "Créer un compte patient"
+                            : "Créer un compte médecin",
+                        onTap: _submit,
+                      ),
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text("Already have an account? Login"),
+                  child: const Text("Déjà un compte ? Se connecter"),
                 ),
-
                 const SizedBox(height: 30),
               ],
             ),
@@ -215,7 +322,6 @@ class _RegisterPageState extends State<RegisterPage> {
 class _RoleSwitcher extends StatelessWidget {
   final UserRole role;
   final ValueChanged<UserRole> onChanged;
-
   const _RoleSwitcher({required this.role, required this.onChanged});
 
   @override
@@ -257,7 +363,6 @@ class _RoleChip extends StatelessWidget {
   final String text;
   final IconData icon;
   final VoidCallback onTap;
-
   const _RoleChip({
     required this.selected,
     required this.text,

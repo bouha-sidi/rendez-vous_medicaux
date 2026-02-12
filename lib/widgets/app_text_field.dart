@@ -5,6 +5,9 @@ class AppTextField extends StatelessWidget {
   final String hint;
   final bool obscure;
   final Widget? suffix;
+  final TextInputType? keyboardType;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   const AppTextField({
     super.key,
@@ -12,6 +15,9 @@ class AppTextField extends StatelessWidget {
     required this.hint,
     this.obscure = false,
     this.suffix,
+    this.keyboardType,
+    this.readOnly = false,
+    this.onTap,
   });
 
   @override
@@ -19,6 +25,9 @@ class AppTextField extends StatelessWidget {
     return TextField(
       controller: controller,
       obscureText: obscure,
+      keyboardType: keyboardType,
+      readOnly: readOnly,
+      onTap: onTap,
       decoration: InputDecoration(hintText: hint, suffixIcon: suffix),
     );
   }

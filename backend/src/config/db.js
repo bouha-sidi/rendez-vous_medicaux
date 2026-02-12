@@ -12,7 +12,6 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
-// Créer la table Users si elle n'existe pas
 export async function initializeDatabase() {
   const connection = await pool.getConnection();
   try {
@@ -29,11 +28,16 @@ export async function initializeDatabase() {
         consultationPrice INT,
         doctorPhoto VARCHAR(255),
         isVerifiedDoctor BOOLEAN DEFAULT false,
+        -- Nouveaux champs pour les patients
+        date_of_birth DATE,
+        address VARCHAR(255),
+        gender ENUM('male','female','other'),
+        profilePhoto VARCHAR(255),
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       )
     `);
-    console.log("✅ Table users créée ou déjà existante");
+    console.log("✅ Table users créée ou déjà existante (avec nouveaux champs)");
   } catch (error) {
     console.error("❌ Erreur lors de la création de la table:", error.message);
   } finally {

@@ -8,12 +8,26 @@ import User from "./models/User.js";
 import authRoutes from "./routes/auth.routes.js";
 import { uploadDoctorPhoto } from "./middleware/uploadDoctorPhoto.js";
 import { initializeDatabase } from "./config/db.js";
+import doctorsRoutes from "./routes/doctors.routes.js";
+import availabilityRoutes from "./routes/availability.routes.js";
+import appointmentsRoutes from "./routes/appointments.routes.js";
+import patientRoutes from "./routes/patient.routes.js";
+import appointmentRoutes from "./routes/appointments.routes.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+
+app.use("/api/doctors", doctorsRoutes);
+
+app.use("/api/availabilities", availabilityRoutes);
+app.use("/api/appointments", appointmentsRoutes);
+app.use("/api/patient", patientRoutes);
+app.use("/api", appointmentRoutes);
+
+
 
 // ✅ servir les images
 app.use("/uploads", express.static(path.resolve("uploads")));
