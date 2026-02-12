@@ -1,8 +1,6 @@
 // lib/services/api.dart
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,9 +8,10 @@ import 'package:mime/mime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Api {
-  // ✅ Web/Windows: 127.0.0.1
+  // ✅ Web/Windows: localhost
   // ✅ Android emulator: 10.0.2.2
-  static const String baseUrl = "http://127.0.0.1:3000/api";
+  static const String baseUrl = "http://localhost:3000/api";
+  // static const String baseUrl = "http://10.0.2.2:3000/api"; // emulator
 
   // ================= TOKEN =================
   static Future<void> saveSession(String token, String role) async {
@@ -36,6 +35,14 @@ class Api {
     await prefs.clear();
   }
 
+  static Future<Map<String, String>> _authHeadersJson() async {
+    final token = await getToken();
+    return {
+      "Content-Type": "application/json",
+      if (token != null) "Authorization": "Bearer $token",
+    };
+  }
+
   // ================= REGISTER PATIENT (JSON) =================
   static Future<void> registerPatient({
     required String fullName,
@@ -57,7 +64,7 @@ class Api {
 
     final data = _safeJson(res.body);
     if (res.statusCode >= 400) {
-      throw Exception(data["message"] ?? "Register patient failed");
+      throw Exception(_messageOf(data) ?? "Register patient failed");
     }
   }
 
@@ -103,7 +110,7 @@ class Api {
     final data = _safeJson(body);
 
     if (streamed.statusCode >= 400) {
-      throw Exception(data["message"] ?? "Register doctor failed");
+      throw Exception(_messageOf(data) ?? "Register doctor failed");
     }
   }
 
@@ -121,20 +128,92 @@ class Api {
     final data = _safeJson(res.body);
 
     if (res.statusCode >= 400) {
-      throw Exception(data["message"] ?? "Login failed");
+      throw Exception(_messageOf(data) ?? "Login failed");
+    }
+
+    // نتأكد أن الرد Map
+    if (data is! Map<String, dynamic>) {
+      throw Exception("Invalid login response from server");
     }
 
     await saveSession(data["token"], data["user"]["role"]);
     return data;
   }
 
-  static Map<String, dynamic> _safeJson(String body) {
+  // ================= ADMIN =================
+
+  /// GET /api/admin/pending-doctors
+  static Future<List<dynamic>> getPendingDoctors() async {
+    final headers = await _authHeadersJson();
+    final res = await http.get(
+      Uri.parse("$baseUrl/admin/pending-doctors"),
+      headers: headers,
+    );
+
+    final decoded = _safeJson(res.body);
+
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(decoded) ?? "Failed to load pending doctors");
+    }
+
+    // backend يرجّع List مباشرة
+    if (decoded is List) return decoded;
+
+    // في حال رجع Map فيه data
+    if (decoded is Map && decoded["data"] is List) {
+      return (decoded["data"] as List).cast<dynamic>();
+    }
+
+    throw Exception("Invalid response from server");
+  }
+
+  /// PATCH /api/admin/doctors/:id/verify
+  static Future<void> verifyDoctor(int id) async {
+    final headers = await _authHeadersJson();
+    final res = await http.patch(
+      Uri.parse("$baseUrl/admin/doctors/$id/verify"),
+      headers: headers,
+    );
+
+    final data = _safeJson(res.body);
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(data) ?? "Verify failed");
+    }
+  }
+
+  /// DELETE /api/admin/doctors/:id/reject
+  static Future<void> rejectDoctor(int id) async {
+    final headers = await _authHeadersJson();
+    final res = await http.delete(
+      Uri.parse("$baseUrl/admin/doctors/$id/reject"),
+      headers: headers,
+    );
+
+    final data = _safeJson(res.body);
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(data) ?? "Reject failed");
+    }
+  }
+
+  // ✅ Doctor photo url helper
+  static String doctorPhotoUrl(String? filename) {
+    if (filename == null || filename.trim().isEmpty) return "";
+    return "http://localhost:3000/uploads/doctors/$filename";
+  }
+
+  // ================= UTIL =================
+  static dynamic _safeJson(String body) {
     try {
-      final decoded = jsonDecode(body);
-      if (decoded is Map<String, dynamic>) return decoded;
-      return {"message": body};
+      return jsonDecode(body);
     } catch (_) {
       return {"message": body};
     }
+  }
+
+  static String? _messageOf(dynamic decoded) {
+    if (decoded is Map && decoded["message"] != null) {
+      return decoded["message"].toString();
+    }
+    return null;
   }
 }

@@ -19,11 +19,10 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.light(),
       home: const WelcomePage(),
       routes: {
-        '/login': (_) => const LoginPage(),
-        '/register': (_) => const RegisterPage(),
-        '/patient': (_) => const PatientPage(),
-        '/doctor': (_) => const DoctorPage(),
-        '/admin': (_) => const AdminPage(),
+        "/login": (_) => const LoginPage(),
+        "/admin": (_) => const AdminPage(),
+        "/patient": (_) => const PatientPage(),
+        "/doctor": (_) => const DoctorPage(),
       },
     );
   }

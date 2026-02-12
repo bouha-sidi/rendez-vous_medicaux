@@ -2,27 +2,35 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import path from "path";
+
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import path from "path";
 
 import User from "./models/User.js";
 import { uploadDoctorPhoto } from "./middleware/uploadDoctorPhoto.js";
 import { initializeDatabase } from "./config/db.js";
 
+import doctorsRoutes from "./routes/doctors.routes.js";
+import appointmentsRoutes from "./routes/appointments.routes.js";
+import adminRoutes from "./routes/admin.routes.js"; // ✅ NEW
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ servir les images
 app.use("/uploads", express.static(path.resolve("uploads")));
+
+app.use("/api/appointments", appointmentsRoutes);
+app.use("/api/doctors", doctorsRoutes);
+app.use("/api/admin", adminRoutes); // ✅ IMPORTANT
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME";
 
 app.get("/", (req, res) => res.json({ ok: true, msg: "API MED-RDV running" }));
 
-// ✅ REGISTER (patient JSON / doctor multipart + photo)
+// ✅ REGISTER
 app.post(
   "/api/auth/register",
   (req, res, next) => {
@@ -50,14 +58,13 @@ app.post(
       if (!role || !userFullName || !email || !phone || !password) {
         return res.status(400).json({ message: "Missing required fields" });
       }
-      if (!["patient", "doctor"].includes(role)) {
+      if (!["patient", "doctor", "admin"].includes(role)) {
         return res.status(400).json({ message: "Invalid role" });
       }
 
       if (role === "doctor") {
-        if (!req.file) {
+        if (!req.file)
           return res.status(400).json({ message: "Doctor photo is required" });
-        }
         if (!specialty || !clinicAddress || consultationPrice == null) {
           return res.status(400).json({ message: "Doctor fields required" });
         }
@@ -79,15 +86,13 @@ app.post(
         clinicAddress: role === "doctor" ? clinicAddress : null,
         consultationPrice: role === "doctor" ? Number(consultationPrice) : null,
         doctorPhoto: role === "doctor" ? req.file.filename : null,
-        isVerifiedDoctor: role === "doctor" ? false : false,
+        isVerifiedDoctor: role === "doctor" ? false : true, // ✅ patient/admin true
       });
 
-      return res
-        .status(201)
-        .json({ message: "Registered", userId: created._id });
+      res.status(201).json({ message: "Registered", userId: created._id });
     } catch (e) {
       console.error(e);
-      return res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Server error" });
     }
   },
 );
@@ -105,8 +110,10 @@ app.post("/api/auth/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-    // (optionnel) bloquer doctor non vérifié
-    if (user.role === "doctor" && user.isVerifiedDoctor === 0) {
+    if (
+      user.role === "doctor" &&
+      (user.isVerifiedDoctor === 0 || user.isVerifiedDoctor === false)
+    ) {
       return res.status(403).json({ message: "Doctor not verified yet" });
     }
 
@@ -116,7 +123,7 @@ app.post("/api/auth/login", async (req, res) => {
       { expiresIn: "7d" },
     );
 
-    return res.json({
+    res.json({
       token,
       user: {
         id: user.id,
@@ -134,11 +141,10 @@ app.post("/api/auth/login", async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-// ✅ Start
 initializeDatabase()
   .then(() => {
     console.log("✅ MySQL connected");
