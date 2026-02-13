@@ -32,10 +32,10 @@ export class User {
       clinicAddress || null,
       consultationPrice ?? null,
       doctorPhoto || null,
-      isVerifiedDoctor === undefined ? false : isVerifiedDoctor,
+      isVerifiedDoctor === undefined ? 0 : Number(isVerifiedDoctor), // ✅ 0/1
     ]);
 
-    return { _id: result.insertId, ...userData };
+    return { id: result.insertId, ...userData };
   }
 
   static async findOne(filter) {
@@ -49,6 +49,43 @@ export class User {
   static async findById(id) {
     const [rows] = await pool.execute(`SELECT * FROM users WHERE id = ?`, [id]);
     return rows.length > 0 ? rows[0] : null;
+  }
+
+  // ✅ NEW: findAll (ex: role doctor)
+  static async findAll(filter = {}) {
+    const { role } = filter;
+
+    if (role) {
+      const [rows] = await pool.execute(`SELECT * FROM users WHERE role = ?`, [
+        role,
+      ]);
+      return rows;
+    }
+
+    const [rows] = await pool.execute(`SELECT * FROM users`);
+    return rows;
+  }
+
+  // ✅ NEW: update fields
+  static async update(id, fields) {
+    const keys = Object.keys(fields || {});
+    if (keys.length === 0) return false;
+
+    const setSql = keys.map((k) => `${k} = ?`).join(", ");
+    const values = keys.map((k) => fields[k]);
+
+    const [result] = await pool.execute(
+      `UPDATE users SET ${setSql} WHERE id = ?`,
+      [...values, id],
+    );
+
+    return result.affectedRows > 0;
+  }
+
+  // ✅ NEW: delete user
+  static async delete(id) {
+    const [result] = await pool.execute(`DELETE FROM users WHERE id = ?`, [id]);
+    return result.affectedRows > 0;
   }
 }
 

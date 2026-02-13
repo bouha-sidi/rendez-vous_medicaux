@@ -1,4 +1,3 @@
-// backend/src/routes/admin.routes.js
 import express from "express";
 import User from "../models/User.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -12,11 +11,11 @@ router.get(
   requireRole("admin"),
   async (req, res) => {
     try {
-      // Récupère tous les doctors
-      const docs = await User.findAll({ role: "doctor" });
+      // ✅ SAFE: get all then filter (avoid "findAll is not a function")
+      const all = await User.findAll(); // must exist in your User.js
+      const doctors = all.filter((u) => u.role === "doctor");
 
-      // ✅ Fix: MySQL peut renvoyer 0, 1, "0", "1"
-      const pending = docs.filter((d) => Number(d.isVerifiedDoctor) === 0);
+      const pending = doctors.filter((d) => Number(d.isVerifiedDoctor) === 0);
 
       res.json(
         pending.map((d) => ({
@@ -57,8 +56,7 @@ router.patch(
   },
 );
 
-// ✅ reject doctor
-// IMPORTANT: ton Flutter utilise PATCH, donc on supporte PATCH ici
+// ✅ reject doctor (delete)
 router.patch(
   "/doctors/:id/reject",
   requireAuth,
@@ -66,8 +64,6 @@ router.patch(
   async (req, res) => {
     try {
       const id = Number(req.params.id);
-
-      // Option 1: supprimer le compte
       const ok = await User.delete(id);
       if (!ok) return res.status(404).json({ message: "Doctor not found" });
 

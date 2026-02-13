@@ -17,9 +17,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+
+      // ✅ tu peux laisser WelcomePage si tu veux
       home: const WelcomePage(),
+
+      // ✅ routes accessibles depuis login
       routes: {
         "/login": (_) => const LoginPage(),
+        "/register": (_) => const RegisterPage(),
         "/admin": (_) => const AdminPage(),
         "/patient": (_) => const PatientPage(),
         "/doctor": (_) => const DoctorPage(),

@@ -200,6 +200,38 @@ class Api {
     if (filename == null || filename.trim().isEmpty) return "";
     return "http://localhost:3000/uploads/doctors/$filename";
   }
+  // ================= GENERIC AUTH REQUESTS =================
+
+  /// GET with Bearer token (JSON)
+  static Future<dynamic> getAuth(String path) async {
+    final headers = await _authHeadersJson();
+    final res = await http.get(
+      Uri.parse("$baseUrl$path"),
+      headers: headers,
+    );
+
+    final data = _safeJson(res.body);
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(data) ?? "GET $path failed");
+    }
+    return data;
+  }
+
+  /// PUT with Bearer token (JSON)
+  static Future<dynamic> putAuth(String path, Map<String, dynamic> body) async {
+    final headers = await _authHeadersJson();
+    final res = await http.put(
+      Uri.parse("$baseUrl$path"),
+      headers: headers,
+      body: jsonEncode(body),
+    );
+
+    final data = _safeJson(res.body);
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(data) ?? "PUT $path failed");
+    }
+    return data;
+  }
 
   // ================= UTIL =================
   static dynamic _safeJson(String body) {

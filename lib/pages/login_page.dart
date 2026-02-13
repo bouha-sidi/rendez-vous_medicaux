@@ -44,16 +44,31 @@ class _LoginPageState extends State<LoginPage> {
       final data = await Api.login(email: email, password: pass);
 
       // backend renvoie: user.role = "patient" | "doctor" | "admin"
-      final role = (data["user"]["role"] ?? "").toString().toLowerCase();
+      final roleRaw = data["user"]?["role"] ?? "";
+      final role = roleRaw.toString().trim().toLowerCase();
+
+      debugPrint("LOGIN ROLE => $role");
 
       if (!mounted) return;
 
+      // ✅ IMPORTANT:
+      // pushNamedAndRemoveUntil => efface l'historique de navigation
+      // donc "Back" ne revient pas au login.
       if (role == "patient") {
-        Navigator.pushReplacementNamed(context, "/patient");
-      } else if (role == "doctor") {
-        Navigator.pushReplacementNamed(context, "/doctor");
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          "/patient",
+          (route) => false,
+        );
+      } else if (role == "doctor" || role == "medecin" || role == "médecin") {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          "/doctor",
+          (route) => false,
+        );
       } else if (role == "admin") {
-        Navigator.pushReplacementNamed(context, "/admin");
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          "/admin",
+          (route) => false,
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Rôle inconnu: $role")),

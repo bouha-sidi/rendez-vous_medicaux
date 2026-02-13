@@ -3,7 +3,6 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "path";
-
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
@@ -11,26 +10,34 @@ import User from "./models/User.js";
 import { uploadDoctorPhoto } from "./middleware/uploadDoctorPhoto.js";
 import { initializeDatabase } from "./config/db.js";
 
-import doctorsRoutes from "./routes/doctors.routes.js";
+import doctorsRoutes from "./routes/doctors.routes.js"; // ✅ LIST doctors (patient)
+import doctorRoutes from "./routes/doctors.routes.js"; // ✅ PROFILE doctor (doctor)
 import appointmentsRoutes from "./routes/appointments.routes.js";
-import adminRoutes from "./routes/admin.routes.js"; // ✅ NEW
+import adminRoutes from "./routes/admin.routes.js";
 
 const app = express();
+
+// ================== MIDDLEWARES ==================
 app.use(cors());
 app.use(express.json());
 
+// Static uploads (photos)
 app.use("/uploads", express.static(path.resolve("uploads")));
 
+// ================== ROUTES MODULES ==================
 app.use("/api/appointments", appointmentsRoutes);
-app.use("/api/doctors", doctorsRoutes);
-app.use("/api/admin", adminRoutes); // ✅ IMPORTANT
+app.use("/api/doctors", doctorsRoutes); // ✅ patient
+app.use("/api/doctor", doctorRoutes); // ✅ doctor profile/update
+app.use("/api/admin", adminRoutes);
 
+// ================== BASIC ROOT ==================
+app.get("/", (req, res) => res.json({ ok: true, msg: "API MED-RDV running" }));
+
+// ================== AUTH (REGISTER + LOGIN) ==================
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME";
 
-app.get("/", (req, res) => res.json({ ok: true, msg: "API MED-RDV running" }));
-
-// ✅ REGISTER
+// ✅ REGISTER (patient/doctor/admin)
 app.post(
   "/api/auth/register",
   (req, res, next) => {
@@ -55,44 +62,55 @@ app.post(
 
       const userFullName = (fullName || name || "").trim();
 
-      if (!role || !userFullName || !email || !phone || !password) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-      if (!["patient", "doctor", "admin"].includes(role)) {
+      if (
+        !["patient", "doctor", "admin"].includes((role || "").toLowerCase())
+      ) {
         return res.status(400).json({ message: "Invalid role" });
       }
+      const r = role.toLowerCase();
 
-      if (role === "doctor") {
-        if (!req.file)
+      if (!userFullName || !email || !phone || !password) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      if (r === "doctor") {
+        if (!req.file) {
           return res.status(400).json({ message: "Doctor photo is required" });
+        }
         if (!specialty || !clinicAddress || consultationPrice == null) {
           return res.status(400).json({ message: "Doctor fields required" });
         }
       }
 
       const exists = await User.findOne({ email });
-      if (exists)
+      if (exists) {
         return res.status(409).json({ message: "Email already used" });
+      }
 
       const passwordHash = await bcrypt.hash(password, 10);
 
       const created = await User.create({
-        role,
+        role: r,
         fullName: userFullName,
         email,
         phone,
         passwordHash,
-        specialty: role === "doctor" ? specialty : null,
-        clinicAddress: role === "doctor" ? clinicAddress : null,
-        consultationPrice: role === "doctor" ? Number(consultationPrice) : null,
-        doctorPhoto: role === "doctor" ? req.file.filename : null,
-        isVerifiedDoctor: role === "doctor" ? false : true, // ✅ patient/admin true
+
+        specialty: r === "doctor" ? specialty : null,
+        clinicAddress: r === "doctor" ? clinicAddress : null,
+        consultationPrice: r === "doctor" ? Number(consultationPrice) : null,
+        doctorPhoto: r === "doctor" ? req.file.filename : null,
+
+        // ✅ IMPORTANT: doctor starts not verified (0), others verified (1)
+        isVerifiedDoctor: r === "doctor" ? 0 : 1,
       });
 
-      res.status(201).json({ message: "Registered", userId: created._id });
+      return res
+        .status(201)
+        .json({ message: "Registered", userId: created.id });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ message: "Server error" });
+      console.error("register error:", e);
+      return res.status(500).json({ message: "Server error" });
     }
   },
 );
@@ -100,9 +118,10 @@ app.post(
 // ✅ LOGIN
 app.post("/api/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password)
+    const { email, password } = req.body || {};
+    if (!email || !password) {
       return res.status(400).json({ message: "Missing fields" });
+    }
 
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
@@ -110,10 +129,7 @@ app.post("/api/auth/login", async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-    if (
-      user.role === "doctor" &&
-      (user.isVerifiedDoctor === 0 || user.isVerifiedDoctor === false)
-    ) {
+    if (user.role === "doctor" && Number(user.isVerifiedDoctor) === 0) {
       return res.status(403).json({ message: "Doctor not verified yet" });
     }
 
@@ -123,7 +139,7 @@ app.post("/api/auth/login", async (req, res) => {
       { expiresIn: "7d" },
     );
 
-    res.json({
+    return res.json({
       token,
       user: {
         id: user.id,
@@ -140,16 +156,21 @@ app.post("/api/auth/login", async (req, res) => {
       },
     });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: "Server error" });
+    console.error("login error:", e);
+    return res.status(500).json({ message: "Server error" });
   }
 });
 
+// ================== START SERVER ==================
 initializeDatabase()
   .then(() => {
     console.log("✅ MySQL connected");
-    app.listen(PORT, () =>
-      console.log(`✅ Server running on http://localhost:${PORT}`),
-    );
+    app.listen(PORT, () => {
+      console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`✅ API base: http://localhost:${PORT}/api`);
+    });
   })
-  .catch((err) => console.error("❌ MySQL error:", err.message));
+  .catch((err) => {
+    console.error("❌ MySQL error:", err.message);
+    process.exit(1);
+  });
