@@ -10,15 +10,28 @@ import User from "./models/User.js";
 import { uploadDoctorPhoto } from "./middleware/uploadDoctorPhoto.js";
 import { initializeDatabase } from "./config/db.js";
 
+// ✅ ROUTES (IMPORTANT: doctorRoutes != doctorsRoutes)
 import doctorsRoutes from "./routes/doctors.routes.js"; // ✅ LIST doctors (patient)
-import doctorRoutes from "./routes/doctors.routes.js"; // ✅ PROFILE doctor (doctor)
+import doctorRoutes from "./routes/doctor.routes.js"; // ✅ PROFILE + appointments (doctor)
 import appointmentsRoutes from "./routes/appointments.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 
 const app = express();
 
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME";
+
 // ================== MIDDLEWARES ==================
-app.use(cors());
+
+// ✅ CORS (باش يخدم من الهاتف)
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
 app.use(express.json());
 
 // Static uploads (photos)
@@ -26,16 +39,14 @@ app.use("/uploads", express.static(path.resolve("uploads")));
 
 // ================== ROUTES MODULES ==================
 app.use("/api/appointments", appointmentsRoutes);
-app.use("/api/doctors", doctorsRoutes); // ✅ patient
-app.use("/api/doctor", doctorRoutes); // ✅ doctor profile/update
+app.use("/api/doctors", doctorsRoutes); // ✅ patient list doctors
+app.use("/api/doctor", doctorRoutes); // ✅ doctor profile + appointments
 app.use("/api/admin", adminRoutes);
 
 // ================== BASIC ROOT ==================
 app.get("/", (req, res) => res.json({ ok: true, msg: "API MED-RDV running" }));
 
 // ================== AUTH (REGISTER + LOGIN) ==================
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "CHANGE_ME";
 
 // ✅ REGISTER (patient/doctor/admin)
 app.post(
@@ -165,9 +176,11 @@ app.post("/api/auth/login", async (req, res) => {
 initializeDatabase()
   .then(() => {
     console.log("✅ MySQL connected");
-    app.listen(PORT, () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`✅ API base: http://localhost:${PORT}/api`);
+
+    // ✅ VERY IMPORTANT FOR PHONE: listen on all interfaces
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`✅ Server running on http://0.0.0.0:${PORT}`);
+      console.log(`✅ API base: http://0.0.0.0:${PORT}/api`);
     });
   })
   .catch((err) => {

@@ -20,6 +20,10 @@ dependencies:
   shared_preferences: ^2.5.4
   image_picker: ^1.1.2
 
+  # ✅ UI like medical kit
+  google_fonts: ^6.2.1
+  intl: ^0.19.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,6 +1,6 @@
 // lib/services/api.dart
 import 'dart:convert';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,10 +8,21 @@ import 'package:mime/mime.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Api {
-  // ✅ Web/Windows: localhost
-  // ✅ Android emulator: 10.0.2.2
-  static const String baseUrl = "http://localhost:3000/api";
-  // static const String baseUrl = "http://10.0.2.2:3000/api"; // emulator
+  /// ✅ IMPORTANT:
+  /// - Web/Chrome: localhost
+  /// - Android emulator: 10.0.2.2
+  /// - Real phone: IP of your PC (same Wi-Fi)
+  ///
+  /// 👉 change devHost to your PC IPv4 (from ipconfig)
+  static const String devHost = "192.168.100.72"; // ✅ CHANGE if needed
+
+  static String get _host {
+    if (kIsWeb) return "localhost";
+    return devHost;
+  }
+
+  static String get baseRoot => "http://$_host:3000";
+  static String get baseUrl => "$baseRoot/api";
 
   // ================= TOKEN =================
   static Future<void> saveSession(String token, String role) async {
@@ -131,7 +142,6 @@ class Api {
       throw Exception(_messageOf(data) ?? "Login failed");
     }
 
-    // نتأكد أن الرد Map
     if (data is! Map<String, dynamic>) {
       throw Exception("Invalid login response from server");
     }
@@ -141,8 +151,6 @@ class Api {
   }
 
   // ================= ADMIN =================
-
-  /// GET /api/admin/pending-doctors
   static Future<List<dynamic>> getPendingDoctors() async {
     final headers = await _authHeadersJson();
     final res = await http.get(
@@ -156,18 +164,13 @@ class Api {
       throw Exception(_messageOf(decoded) ?? "Failed to load pending doctors");
     }
 
-    // backend يرجّع List مباشرة
     if (decoded is List) return decoded;
-
-    // في حال رجع Map فيه data
     if (decoded is Map && decoded["data"] is List) {
       return (decoded["data"] as List).cast<dynamic>();
     }
-
     throw Exception("Invalid response from server");
   }
 
-  /// PATCH /api/admin/doctors/:id/verify
   static Future<void> verifyDoctor(int id) async {
     final headers = await _authHeadersJson();
     final res = await http.patch(
@@ -181,7 +184,6 @@ class Api {
     }
   }
 
-  /// DELETE /api/admin/doctors/:id/reject
   static Future<void> rejectDoctor(int id) async {
     final headers = await _authHeadersJson();
     final res = await http.delete(
@@ -195,12 +197,64 @@ class Api {
     }
   }
 
-  // ✅ Doctor photo url helper
+  // ✅ Doctor photo url helper (no localhost)
   static String doctorPhotoUrl(String? filename) {
     if (filename == null || filename.trim().isEmpty) return "";
-    return "http://localhost:3000/uploads/doctors/$filename";
+    return "$baseRoot/uploads/doctors/$filename";
   }
-  // ================= GENERIC AUTH REQUESTS =================
+
+  // ================= PATIENT =================
+  static Future<List<dynamic>> getDoctors() async {
+    final res = await http.get(Uri.parse("$baseUrl/doctors"));
+    final data = _safeJson(res.body);
+
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(data) ?? "Failed to load doctors");
+    }
+    if (data is List) return data;
+    if (data is Map && data["data"] is List) return (data["data"] as List);
+    throw Exception("Invalid doctors response");
+  }
+
+  static Future<List<dynamic>> getMyAppointments() async {
+    final headers = await _authHeadersJson();
+    final res = await http.get(
+      Uri.parse("$baseUrl/appointments/me"),
+      headers: headers,
+    );
+
+    final data = _safeJson(res.body);
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(data) ?? "Failed to load appointments");
+    }
+    if (data is List) return data;
+    if (data is Map && data["data"] is List) return (data["data"] as List);
+    throw Exception("Invalid appointments response");
+  }
+
+  static Future<void> bookAppointment({
+    required int doctorId,
+    required DateTime dateTime,
+    String? note,
+  }) async {
+    final headers = await _authHeadersJson();
+    final res = await http.post(
+      Uri.parse("$baseUrl/appointments"),
+      headers: headers,
+      body: jsonEncode({
+        "doctorId": doctorId,
+        "appointmentDate": dateTime.toIso8601String(),
+        if (note != null && note.trim().isNotEmpty) "note": note.trim(),
+      }),
+    );
+
+    final data = _safeJson(res.body);
+    if (res.statusCode >= 400) {
+      throw Exception(_messageOf(data) ?? "Booking failed");
+    }
+  }
+
+  // ================= GENERIC AUTH REQUESTS (✅ FIXED) =================
 
   /// GET with Bearer token (JSON)
   static Future<dynamic> getAuth(String path) async {
